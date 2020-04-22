@@ -9,7 +9,9 @@ Paclet[
     Loading -> Automatic,
     Extensions -> 
         {
-            {"Kernel", Symbols ->  {}, Root -> "Kernel", Context -> {"COVID19`"}
+            {"Kernel", Symbols ->  {"CountryPlotsAndData", "COVIDTrackingData", 
+            	"DeployMetroData", "EpidemicData", "MetroData", "NYTimesData", 
+            	"OurWorldInDataTestingData", "USCountyGrowthPlot"}, Root -> "Kernel", Context -> {"COVID19`"}
             }
         }
 ]
