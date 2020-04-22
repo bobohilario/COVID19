@@ -57,9 +57,9 @@ metroData[area_, opts:OptionsPattern[]]:=Block[{$covidprogessid=CreateUUID[]},
 
 metroData[___]:=$Failed
 
-stylemap[counties_]:= (stylemap[counties]=MapIndexed[# -> ColorData[1][#2[[1]]] &,Prepend[counties, "Metro Area Total"]]);
+stylemap[counties_]:= (stylemap[counties]=MapIndexed[# -> ColorData[1][#2[[1]]] &,Prepend[counties, $entitytotallabel]]);
 
-optsfunc[counties_,data_,start_] := {PlotRange -> {{start, Automatic}, Automatic},
+optsfunc[counties_,data_,start_] := {PlotRange -> {{start, Automatic}, Full},
    ImageSize -> 400, PlotLegends -> None, 
    FrameTicks -> {{Automatic, All}, {Automatic, False}}, 
    PlotStyle -> Values@KeyTake[stylemap[counties], Normal@Keys[data]], 
@@ -70,9 +70,13 @@ timelineTitle[title_,date_]:=Style[Column[{title, "From NY Times data on " <> Da
 columnLabels[minc_,mind_]:=Style[#, 18, Italic] & /@ {
 		"Cases (> "<>ToString[minc]<>")", "Deaths (> " <> ToString[mind] <> ")"}
 
+$CovidEntityType="USCounty";
+$entitytotallabel:="Combined Total"/;$CovidEntityType==="Country"
+$entitytotallabel:="Metro Area Total"
+
 countyLegend[counties_, cases_, deaths_]:=SwatchLegend[Lookup[stylemap[counties], #], #] &@
     ResourceFunction["SortLike"][Normal[Union[Keys[cases], Keys[deaths]]], 
-     Prepend[counties, "Metro Area Total"]]
+     Prepend[counties, $entitytotallabel]]
      
 metroPlotGrid[counties_,cases_,deaths_,{mintime_,maxtime_},
 	title_:"Metro Area COVID-19 Timelines",opts:OptionsPattern[metroData]]:=With[

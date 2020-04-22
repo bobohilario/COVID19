@@ -23,9 +23,14 @@ getOurWorldData[]:=With[
 ]
 
 parseOurWorldData[dslist_]:=First[dslist][DeleteDuplicates][
-	Select[StringLength[#Entity] > 1 &], {"Entity" -> (Interpreter["Country"][First[StringSplit[#, " - "]]] &)}]
-	
-	
+	Select[StringLength[#Entity] > 1 &], 
+		{"Entity" -> (Interpreter["Country"][First[StringSplit[#, " - "]]] &),"Source URL"->URL}][
+		All,
+		KeySortBy[#/.{"Entity"->1,"Date"->2,"Cumulative total"->3,
+			"Daily change in cumulative total"->4,
+			"Cumulative total per million"->5,"Daily change in cumulative total per million"->6}&]
+		]
+
 	
 End[] 
 EndPackage[]

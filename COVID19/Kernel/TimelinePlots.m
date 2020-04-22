@@ -12,7 +12,7 @@ cumulativePlots[{cases_,casesopts_},{deaths_,deathsopts_}]:={
 
 
 population[counties_,Key[ent_Entity]] := ent["Population"]
-population[counties_,Key["Metro Area Total"]] := (
+population[counties_,Key["Metro Area Total"]|Key["Combined Total"]|Key[$entitytotallabel]] := (
 	updateProgress[$covidprogessid, "Finding Populations"];
 	Total[#["Population"]& /@ counties])
 
