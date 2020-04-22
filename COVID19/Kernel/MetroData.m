@@ -10,10 +10,10 @@ COVID19`MetroData[args___]:=Catch[metroData[args]]
 
 Options[COVID19`MetroData]=Options[metroData]={"UpdateData"->False,"SmoothingDays"->7,"MinimumCases"->50,"MinimumDeaths"->10,"MetroName"->""};
 
+Options[COVID19`DeployMetroData]=Join[Options[COVID19`MetroData],Options[CloudDeploy]]
+
 metroData[counties:{_Entity..},opts:OptionsPattern[]]:=Module[
-	{timeseries, totalpop,mintime,maxtime, cases, deaths,alignedcases,aligneddeaths},
-	updateProgress[$covidprogessid, "Finding Populations"];
-	totalpop = Total[#["Population"] & /@ counties]; (* entity cache will store populations for all counties *)
+	{timeseries, totalpop,mintime,maxtime, cases, deaths},
 	
 	updateProgress[$covidprogessid, "Getting Data From NY Times"];
 	timeseries = If[TrueQ[OptionValue["UpdateData"]],
@@ -39,7 +39,7 @@ metroData[counties:{_Entity..},opts:OptionsPattern[]]:=Module[
 		counties,
 		cases,
 		deaths,
-		maxtime,
+		{mintime,maxtime},
 		OptionValue["MetroName"]<>"Metro Area COVID-19 Timelines",
 		opts
 	]
@@ -49,72 +49,46 @@ metroData[counties:{_Entity..},opts:OptionsPattern[]]:=Module[
 	}
 ]
 
-metroData[area_]:=Block[{$covidprogessid=CreateUUID[]},
+metroData[area_, opts:OptionsPattern[]]:=Block[{$covidprogessid=CreateUUID[]},
 	updateProgress[$covidprogessid, "Finding Counties"];
-	metroData[MetroAreaCounties[area]]
+	metroData[MetroAreaCounties[area],opts]
 ]
 
 
 metroData[___]:=$Failed
 
-pop[counties_,Key[ent_Entity]] := ent["Population"]
-pop[counties_,Key["Metro Area Total"]] = Total[#["Population"] & /@ counties]
-
-tozerotime[ts_] := TimeSeries[With[{first = #[[1, 1]]},
-     MapAt[(# - first)/86400 &, #, {All, 1}]] &[ts["Path"]]]
-
 stylemap[counties_]:= (stylemap[counties]=MapIndexed[# -> ColorData[1][#2[[1]]] &,Prepend[counties, "Metro Area Total"]]);
 
-optsfunc[counties_,data_] := {PlotRange -> {{"March 12", Automatic}, Automatic},
-    ImageSize -> 400, PlotLegends -> None, 
+optsfunc[counties_,data_,start_] := {PlotRange -> {{start, Automatic}, Automatic},
+   ImageSize -> 400, PlotLegends -> None, 
    FrameTicks -> {{Automatic, All}, {Automatic, False}}, 
    PlotStyle -> Values@KeyTake[stylemap[counties], Normal@Keys[data]], 
    GridLines -> {None, Automatic}};
    
-   
-metroPlotGrid[
-	counties_,
-	cases_,
-	deaths_,
-	maxtime_,
-	title_:"Metro Area COVID-19 Timelines",
-	opts:OptionsPattern[metroData]
-]:=With[{smoothing=OptionValue["SmoothingDays"],alignedcases = cases[All, ResourceFunction["TimeSeriesAlign"][#, 0] &][All, tozerotime],
-	aligneddeaths = deaths[All, ResourceFunction["TimeSeriesAlign"][#, 0] &][All, tozerotime]},
-	updateProgress[$covidprogessid, "Cumulative Plots"];
-Grid[{{
-	Style[Column[{title, "From NY Times data on " <> DateString[maxtime, "DateShort"]}, Alignment -> Center], 24], SpanFromLeft, ""},
-	Append[Style[#, 18, Italic] & /@ {
-		"Cases (> "<>ToString[OptionValue["MinimumCases"]]<>")", "Deaths (> " <> ToString[OptionValue["MinimumDeaths"]] <> ")"}, SpanFromAbove],
-  {DateListLogPlot[cases, optsfunc[counties,cases], 
-    PlotLabel -> "Cumulative (Log)"],
-   DateListLogPlot[deaths, optsfunc[counties,cases], 
-    PlotLabel -> "Cumulative (Log)"], 
-   SwatchLegend[Lookup[stylemap[counties], #], #] &@
+timelineTitle[title_,date_]:=Style[Column[{title, "From NY Times data on " <> DateString[date, "DateShort"]}, Alignment -> Center], 24] 
+ 
+columnLabels[minc_,mind_]:=Style[#, 18, Italic] & /@ {
+		"Cases (> "<>ToString[minc]<>")", "Deaths (> " <> ToString[mind] <> ")"}
+
+countyLegend[counties_, cases_, deaths_]:=SwatchLegend[Lookup[stylemap[counties], #], #] &@
     ResourceFunction["SortLike"][Normal[Union[Keys[cases], Keys[deaths]]], 
-     Prepend[counties, "Metro Area Total"]]},
-  {
-	updateProgress[$covidprogessid, "Per Capita Plots"];
-  	DateListLogPlot[cases[MapIndexed[#1/QuantityMagnitude[pop[counties,#2[[1]]]] &]], optsfunc[counties,cases], PlotLabel -> "Cumulative per Capita (Log)"],
-   DateListLogPlot[deaths[MapIndexed[#1/QuantityMagnitude[pop[counties,#2[[1]]]] &]],optsfunc[counties,deaths], PlotLabel -> "Cumulative per Capita (Log)"], SpanFromAbove},
-  {
-	updateProgress[$covidprogessid, "Daily Cases Plots"];
-	DateListPlot[cases[All, (MovingAverage[#, Quantity[smoothing, "Days"]] &) /* Differences], optsfunc[counties,cases], 
-    PlotLabel ->"New Cases (" <> ToString[smoothing] <> " day average)"],
-   DateListPlot[deaths[All, (MovingAverage[#, Quantity[smoothing, "Days"]] &) /* Differences], optsfunc[counties,deaths], 
-    PlotLabel ->"New Deaths (" <> ToString[smoothing] <> " day average)"], SpanFromAbove},
-  {
-	updateProgress[$covidprogessid, "Growth Ratio Plots"];DateListPlot[cases[All, (MovingAverage[#, Quantity[smoothing, "Days"]] &) /*Ratios], optsfunc[counties,cases], 
-    PlotLabel -> "Growth Ratio (" <> ToString[smoothing] <> " day average)"],
-   DateListPlot[deaths[All, (MovingAverage[#, Quantity[smoothing, "Days"]] &) /* Ratios], optsfunc[counties,deaths], 
-    PlotLabel -> "Growth Ratio (" <> ToString[smoothing] <> " day average)"], SpanFromAbove},
-  {
-	updateProgress[$covidprogessid, "Aligned Cumulative Plots"];
-	growthPlotWithTrendLines[alignedcases,"Cases", Sequence @@ Normal@KeyDrop[optsfunc[counties,alignedcases], PlotRange], 
-    PlotLabel -> "Aligned Cumulative Plot (Log vs Days since "<>ResourceFunction["OrdinalNumberString"][OptionValue["MinimumCases"]]<>" case)"],
-  	growthPlotWithTrendLines[aligneddeaths,"Deaths", Sequence @@ Normal@KeyDrop[optsfunc[counties,aligneddeaths], PlotRange], 
-    PlotLabel -> "Aligned Cumulative Plot (Log vs Days since "<>ResourceFunction["OrdinalNumberString"][OptionValue["MinimumDeaths"]]<>" death)"],
-   SpanFromAbove}
+     Prepend[counties, "Metro Area Total"]]
+     
+metroPlotGrid[counties_,cases_,deaths_,{mintime_,maxtime_},
+	title_:"Metro Area COVID-19 Timelines",opts:OptionsPattern[metroData]]:=With[
+	{smoothing=OptionValue["SmoothingDays"],
+	alignedcases = cases[All, ResourceFunction["TimeSeriesAlign"][#, 0] &][All, tozerotime],
+	aligneddeaths = deaths[All, ResourceFunction["TimeSeriesAlign"][#, 0] &][All, tozerotime],
+	casesopts=optsfunc[counties,cases, mintime+Quantity[OptionValue["SmoothingDays"],"Days"]],
+	deathsopts=optsfunc[counties,deaths,mintime+Quantity[OptionValue["SmoothingDays"],"Days"]]},
+Grid[{
+	{Style[timelineTitle[title,maxtime], 24], SpanFromLeft, ""},
+	Append[columnLabels[OptionValue["MinimumCases"],OptionValue["MinimumDeaths"]], SpanFromAbove],
+  	Append[cumulativePlots[{cases,casesopts},{deaths,deathsopts}],countyLegend[counties, cases, deaths]],
+	Append[perCapitaPlots[{cases,casesopts},{deaths,deathsopts},counties],SpanFromAbove],
+  	Append[differencesPlots[{cases,casesopts},{deaths,deathsopts}, smoothing],SpanFromAbove],
+  	Append[ratioPlots[{cases,casesopts},{deaths,deathsopts}, smoothing],SpanFromAbove],
+  	Append[alignedGrowthPlots[{alignedcases,casesopts},{aligneddeaths,deathsopts},{OptionValue["MinimumCases"],OptionValue["MinimumDeaths"]}],SpanFromAbove]
   }]
 ]
 
@@ -131,14 +105,16 @@ tabledata[ts_] := With[{path = Normal[ts]},
     }
   ]
 
-DeployMetroData[area_,location_]:=(Quiet[DeleteObject[CloudObject[location]];
-	With[{res=COVID19`MetroData[area]},
+Options[COVID19`DeployMetroData]=Join[Options[COVID19`MetroData],Options[CloudDeploy]]
+
+DeployMetroData[area_,location_, opts:OptionsPattern[]]:=(Quiet[DeleteObject[CloudObject[location]];
+	With[{res=COVID19`MetroData[area, Sequence@@FilterRules[{opts},Options[COVID19`MetroData]]]},
 		CloudDeploy[Notebook[{Cell["Timelines", "Section"],
 		   Cell[BoxData[ToBoxes[res[[1]]]], "Output"],
 		   Cell["Data", "Section"],
 		   Cell[BoxData[ToBoxes[res[[2]]]], "Output"]
 		   }, "ClickToCopyEnabled" -> 
-		   False], location, 
+		   False], location, Sequence@@FilterRules[{opts},Options[CloudDeploy]],
 		 Permissions -> "Public"]
 		]
 ])
